@@ -32,6 +32,7 @@ func (y *YySpider) Header(headers map[string]string) *YySpider {
 
 }
 
-func (y *YySpider) NewPage() {
+func (y *YySpider) NewPage() *Page {
 
+	return &Page{}
 }
