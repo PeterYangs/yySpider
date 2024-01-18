@@ -1,4 +1,4 @@
-module github.com/PeterYangs/yySpider
+module gitee.com/mryy1996/yySpider
 
 go 1.20
 
