@@ -1,10 +1,17 @@
 package main
 
-import "github.com/PeterYangs/yySpider"
+import (
+	"github.com/PeterYangs/yySpider"
+	"golang.org/x/net/context"
+)
 
 func main() {
 
-	s := yySpider.NewYySpider()
+	cxt, cancel := context.WithCancel(context.Background())
+
+	//cancel()
+	_ = cancel
+	s := yySpider.NewYySpider(cxt)
 
 	s.Host("https://www.925g.com")
 
