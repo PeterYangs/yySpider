@@ -1,6 +1,7 @@
 package yySpider
 
 import (
+	"fmt"
 	"github.com/PeterYangs/tools"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/go-resty/resty/v2"
@@ -86,9 +87,9 @@ func (y *YySpider) Start() {
 
 				listLink := y.host + strings.Replace(listPage.channel, "[PAGE]", strconv.Itoa(listPage.pageCurrent), -1)
 
-				//fmt.Println(listLink)
+				fmt.Println(listLink)
 
-				y.getList(listLink)
+				y.getList(listLink, listPage)
 
 			}
 
@@ -98,11 +99,29 @@ func (y *YySpider) Start() {
 
 }
 
-func (y *YySpider) getList(listUrl string) {
+func (y *YySpider) getList(listUrl string, listPage *ListPage) {
+
+	html, err := y.requestHtml(listUrl)
+
+	if err != nil {
+
+		fmt.Println(err.Message)
+
+		return
+
+	}
+
+	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
+
+	doc.Find(listPage.listSelector).Each(func(i int, selection *goquery.Selection) {
+
+		//fmt.Println(selection.Text())
+
+	})
 
 }
 
-func (y *YySpider) getHtml(htmlUrl string) (string, *SpiderError) {
+func (y *YySpider) requestHtml(htmlUrl string) (string, *SpiderError) {
 
 	rsp, err := y.client.R().Get(htmlUrl)
 
