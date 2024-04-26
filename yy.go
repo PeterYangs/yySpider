@@ -87,7 +87,7 @@ func (y *YySpider) Start() {
 
 				listLink := y.host + strings.Replace(listPage.channel, "[PAGE]", strconv.Itoa(listPage.pageCurrent), -1)
 
-				fmt.Println(listLink)
+				//fmt.Println(listLink)
 
 				y.getList(listLink, listPage)
 
@@ -115,7 +115,7 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage) {
 
 	doc.Find(listPage.listSelector).Each(func(i int, selection *goquery.Selection) {
 
-		//fmt.Println(selection.Text())
+		fmt.Println(selection.Text())
 
 	})
 

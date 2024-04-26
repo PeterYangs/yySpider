@@ -9,6 +9,7 @@ func main() {
 
 	//cxt, cancel := context.WithCancel(context.Background())
 
+	//每个page需要一个入口
 	//cancel()
 	//_ = cancel
 	s := yySpider.NewYySpider(context.Background())
