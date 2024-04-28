@@ -3,15 +3,18 @@ package yySpider
 import "strings"
 
 type ListPage struct {
-	channel      string
-	listSelector string
-	hrefSelector string
-	pageStart    int
-	pageLength   int
-	pageCurrent  int //当前分页
+	channel          string
+	listSelector     string
+	hrefSelector     string
+	pageStart        int
+	pageLength       int
+	pageCurrent      int //当前分页
+	hrefSelectorAttr string
+	fields           map[string]Field //列表页面字段选择器
+	y                *YySpider
 }
 
-func NewListPage(channel string, listSelector string, hrefSelector string, pageStart int, pageLength int) *ListPage {
+func NewListPage(y *YySpider, channel string, listSelector string, hrefSelector string, pageStart int, pageLength int) *ListPage {
 
 	l := &ListPage{}
 
@@ -24,6 +27,8 @@ func NewListPage(channel string, listSelector string, hrefSelector string, pageS
 	l.SetPageStart(pageStart)
 
 	l.SetPageLength(pageLength)
+
+	l.SetHrefSelectorAttr("")
 
 	return l
 }
@@ -63,4 +68,30 @@ func (l *ListPage) SetPageLength(pageLength int) *ListPage {
 	l.pageLength = pageLength
 
 	return l
+}
+
+func (l *ListPage) SetHrefSelectorAttr(hrefSelector string) *ListPage {
+
+	if strings.TrimSpace(hrefSelector) == "" {
+
+		l.hrefSelector = "href"
+
+		return l
+	}
+
+	l.hrefSelector = hrefSelector
+
+	return l
+}
+
+func (l *ListPage) SetFields(f map[string]Field) *ListPage {
+
+	l.fields = f
+
+	return l
+}
+
+func (l *ListPage) GetFields() map[string]Field {
+
+	return l.fields
 }

@@ -16,7 +16,17 @@ func main() {
 
 	s.Host("https://www.925g.com")
 
-	s.NewListPage("/gonglue/list_[PAGE].html", "body > div.ny-container.uk-background-default > div.wrap > div > div.commonLeftDiv.uk-float-left > div > div.bdDiv > div > ul > li", "a", 1, 20)
+	page := s.NewListPage(
+		"/gonglue/list_[PAGE].html",
+		"body > div.ny-container.uk-background-default > div.wrap > div > div.commonLeftDiv.uk-float-left > div > div.bdDiv > div > ul > li",
+		"a",
+		1,
+		20,
+	)
+
+	page.SetFields(map[string]yySpider.Field{
+		"title": {Type: yySpider.Text, Selector: "a > div > span"},
+	})
 
 	s.Start()
 
