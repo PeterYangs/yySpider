@@ -11,10 +11,11 @@ type ListPage struct {
 	pageCurrent      int //当前分页
 	hrefSelectorAttr string
 	fields           map[string]Field //列表页面字段选择器
+	hasNextPage      bool
 	y                *YySpider
 }
 
-func NewListPage(y *YySpider, channel string, listSelector string, hrefSelector string, pageStart int, pageLength int) *ListPage {
+func newListPage(y *YySpider, channel string, listSelector string, pageStart int, pageLength int) *ListPage {
 
 	l := &ListPage{}
 
@@ -22,13 +23,15 @@ func NewListPage(y *YySpider, channel string, listSelector string, hrefSelector 
 
 	l.SetListSelector(listSelector)
 
-	l.SetHrefSelector(hrefSelector)
+	//l.SetHrefSelector(hrefSelector)
 
 	l.SetPageStart(pageStart)
 
 	l.SetPageLength(pageLength)
 
-	l.SetHrefSelectorAttr("")
+	//l.SetHrefSelectorAttr("")
+
+	l.y = y
 
 	return l
 }
@@ -48,13 +51,13 @@ func (l *ListPage) SetListSelector(listSelector string) *ListPage {
 	return l
 }
 
-func (l *ListPage) SetHrefSelector(hrefSelector string) *ListPage {
-
-	l.hrefSelector = hrefSelector
-
-	return l
-
-}
+//func (l *ListPage) SetHrefSelector(hrefSelector string) *ListPage {
+//
+//	l.hrefSelector = hrefSelector
+//
+//	return l
+//
+//}
 
 func (l *ListPage) SetPageStart(pageStart int) *ListPage {
 
@@ -70,19 +73,19 @@ func (l *ListPage) SetPageLength(pageLength int) *ListPage {
 	return l
 }
 
-func (l *ListPage) SetHrefSelectorAttr(hrefSelector string) *ListPage {
-
-	if strings.TrimSpace(hrefSelector) == "" {
-
-		l.hrefSelector = "href"
-
-		return l
-	}
-
-	l.hrefSelector = hrefSelector
-
-	return l
-}
+//func (l *ListPage) SetHrefSelectorAttr(hrefSelector string) *ListPage {
+//
+//	if strings.TrimSpace(hrefSelector) == "" {
+//
+//		l.hrefSelector = "href"
+//
+//		return l
+//	}
+//
+//	l.hrefSelector = hrefSelector
+//
+//	return l
+//}
 
 func (l *ListPage) SetFields(f map[string]Field) *ListPage {
 
@@ -94,4 +97,15 @@ func (l *ListPage) SetFields(f map[string]Field) *ListPage {
 func (l *ListPage) GetFields() map[string]Field {
 
 	return l.fields
+}
+
+func (l *ListPage) SetNextPageLinkSelector(hrefSelector string, hrefSelectorAttr string) *ListPage {
+
+	l.hasNextPage = true
+
+	l.hrefSelector = hrefSelector
+
+	l.hrefSelectorAttr = hrefSelectorAttr
+
+	return l
 }
