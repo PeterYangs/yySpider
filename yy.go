@@ -8,7 +8,9 @@ import (
 	"github.com/phpisfirstofworld/image"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	"github.com/xuri/excelize/v2"
 	"golang.org/x/net/context"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -34,15 +36,22 @@ type YySpider struct {
 	customDownloadFun          func(imgUrl string, imgPath string) error //自实现图片下载
 	imageResizePercent         int                                       //图片缩放百分比
 	imageResizeByte            int64                                     //图片超过此设置的大小就执行图片缩放，单位字节
-
+	lock                       sync.Mutex
+	hasGetExcelHeader          bool
+	excelKeyArray              []string
+	excelSheetIndex            int
+	excelIndex                 int
+	excelFile                  *excelize.File
 }
 
 func NewYySpider(cxt context.Context) *YySpider {
 
 	//client := resty.New()
-	y := &YySpider{header: make(map[string]string), cxt: cxt, imageDir: "image"}
+	y := &YySpider{header: make(map[string]string), cxt: cxt, imageDir: "image", lock: sync.Mutex{}}
 
 	y.client = y.httpInit()
+
+	y.excelInit()
 
 	return y
 }
@@ -152,26 +161,119 @@ func (y *YySpider) Start() error {
 		return errors.New("page数量为0")
 	}
 
-	//firstPage := y.pageList[0]
-
 	y.dealPage("", 0, res)
 
-	//for _, item := range y.pageList {
-	//
-	//	y.dealPage("", item)
-	//
-	//}
+	xlsxName := uuid.NewV4().String()
+
+	err := y.excelFile.SaveAs(xlsxName + ".xlsx")
+
+	if err != nil {
+
+		return err
+	}
+
+	log.Println(xlsxName + ".xlsx")
 
 	return nil
+
 }
 
 func (y *YySpider) dealRes(res map[string]string) {
 
-	//for s, s2 := range res {
+	sheetName := y.excelFile.GetSheetName(y.excelSheetIndex)
+
+	if !y.hasGetExcelHeader {
+
+		y.lock.Lock()
+
+		var keyArr []string
+
+		for s, _ := range res {
+
+			keyArr = append(keyArr, s)
+		}
+
+		y.excelKeyArray = keyArr
+
+		y.hasGetExcelHeader = true
+
+		//设置表头
+		for i, s := range y.excelKeyArray {
+
+			y.excelFile.SetCellValue(sheetName, y.getColumnNameByIndex(i+1)+"1", s)
+		}
+
+		y.excelIndex++
+
+		y.lock.Unlock()
+
+	}
+
+	for s, s2 := range res {
+
+		y.excelFile.SetCellValue(sheetName, y.getCell(s)+strconv.Itoa(y.excelIndex+1), s2)
+
+		//fmt.Println(s, s2)
+
+	}
+
+	y.debugMsg(res, "", "")
+
+	y.excelIndex++
+
+}
+
+func (y *YySpider) getCell(key string) string {
+
+	for i, s := range y.excelKeyArray {
+
+		if s == key {
+
+			return y.getColumnNameByIndex(i + 1)
+		}
+
+	}
+
+	return "A"
+
+}
+
+func (y *YySpider) getColumnNameByIndex(index int) string {
+	if index <= 0 {
+		return ""
+	}
+	var columnName string
+	for index > 0 {
+		index--
+		columnName = string(rune((index%26)+'A')) + columnName
+		index /= 26
+	}
+	return columnName
+}
+
+func (y *YySpider) excelInit() {
+
+	f := excelize.NewFile()
+	//defer func() {
+	//	if err := f.Close(); err != nil {
+	//		//fmt.Println(err)
 	//
-	//	fmt.Println(s, s2)
-	//}
-	fmt.Println(res)
+	//	}
+	//}()
+	// Create a new sheet.
+	index, err := f.NewSheet("Sheet1")
+	if err != nil {
+		//fmt.Println(err)
+
+		y.debugMsg(err.Error(), "", "")
+
+		return
+	}
+
+	y.excelSheetIndex = index
+
+	y.excelFile = f
+
 }
 
 func (y *YySpider) httpInit() *resty.Client {
@@ -561,11 +663,11 @@ func (y *YySpider) getCharsetByContentType(contentType string) string {
 }
 
 // debugMsg debug信息输出
-func (y *YySpider) debugMsg(msg string, link string, selector string) {
+func (y *YySpider) debugMsg(msg any, link string, selector string) {
 
 	if y.debug {
 
-		str := msg + " "
+		str := fmt.Sprintln(msg) + " "
 
 		if link != "" {
 
