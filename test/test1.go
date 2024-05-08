@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"gitee.com/mryy1996/yySpider"
+	"github.com/PeterYangs/yySpider"
 	"golang.org/x/net/context"
 )
 
