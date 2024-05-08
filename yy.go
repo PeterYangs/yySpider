@@ -54,7 +54,7 @@ func (y *YySpider) Host(host string) *YySpider {
 	return y
 }
 
-func (y *YySpider) Header(headers map[string]string) *YySpider {
+func (y *YySpider) Headers(headers map[string]string) *YySpider {
 
 	y.header = headers
 
@@ -201,35 +201,52 @@ func (y *YySpider) dealPage(link string, currentIndex int, res map[string]string
 
 		listPage := page.(*ListPage)
 
-	FOR:
-		for listPage.pageCurrent = listPage.pageStart; listPage.pageCurrent < listPage.pageStart+listPage.pageLength; listPage.pageCurrent++ {
+		if link != "" {
 
-			select {
+			//fmt.Println(link)
 
-			case <-y.cxt.Done():
-
-				break FOR
-
-			default:
-
-			}
-
-			listLink := y.host + strings.Replace(listPage.channel, "[PAGE]", strconv.Itoa(listPage.pageCurrent), -1)
-
-			fmt.Println(listLink, listPage.pageCurrent, listPage.pageStart+listPage.pageLength)
-
-			err := y.getList(listLink, listPage, res, currentIndex)
+			err := y.getList(link, listPage, res, currentIndex)
 
 			if err != nil {
 
 				//y.Debug()
 
-				y.debugMsg(err.Error(), listLink, "")
+				y.debugMsg(err.Error(), link, "")
 
 			}
 
-			//return err
+		} else {
 
+		FOR:
+			for listPage.pageCurrent = listPage.pageStart; listPage.pageCurrent < listPage.pageStart+listPage.pageLength; listPage.pageCurrent++ {
+
+				select {
+
+				case <-y.cxt.Done():
+
+					break FOR
+
+				default:
+
+				}
+
+				listLink := y.host + strings.Replace(listPage.channel, "[PAGE]", strconv.Itoa(listPage.pageCurrent), -1)
+
+				//fmt.Println(listLink, listPage.pageCurrent, listPage.pageStart+listPage.pageLength)
+
+				err := y.getList(listLink, listPage, res, currentIndex)
+
+				if err != nil {
+
+					//y.Debug()
+
+					y.debugMsg(err.Error(), listLink, "")
+
+				}
+
+				//return err
+
+			}
 		}
 
 	case *DetailPage:
@@ -266,6 +283,8 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 
 	}
 
+	fmt.Println(listUrl)
+
 	//fmt.Println(html)
 
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
@@ -274,15 +293,28 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 
 		href := ""
 
-		//isFind := false
+		isFind := false
 
-		if strings.TrimSpace(listPage.hrefSelector) == "" {
+		if listPage.hasNextPage {
 
-			href, _ = selection.Attr(listPage.hrefSelectorAttr)
+			if strings.TrimSpace(listPage.hrefSelector) == "" {
 
-		} else {
+				href, isFind = selection.Attr(listPage.hrefSelectorAttr)
 
-			href, _ = selection.Find(listPage.hrefSelector).Attr(listPage.hrefSelectorAttr)
+			} else {
+
+				href, isFind = selection.Find(listPage.hrefSelector).Attr(listPage.hrefSelectorAttr)
+
+			}
+
+			if !isFind {
+
+				y.debugMsg("下一页选择器未找到", listUrl, listPage.listSelector+" "+listPage.hrefSelectorAttr)
+
+			} else {
+
+				href = y.getHref(href)
+			}
 
 		}
 
