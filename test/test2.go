@@ -37,7 +37,7 @@ func main() {
 	//设置下一页入口
 	list.SetNextPageLinkSelector("a", "href")
 
-	//小时章节列表页面
+	//小说章节列表页面
 	list2 := s.NewListPage(
 		"",
 		".section-list li",
