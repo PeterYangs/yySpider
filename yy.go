@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -42,6 +43,8 @@ type YySpider struct {
 	excelSheetIndex            int
 	excelIndex                 int
 	excelFile                  *excelize.File
+	xlsxName                   string                       //自定义xlsx文件名
+	resultCallback             func(item map[string]string) //自定义获取采集结果回调
 }
 
 func NewYySpider(cxt context.Context) *YySpider {
@@ -152,6 +155,21 @@ func (y *YySpider) NewDetailPage() *DetailPage {
 
 }
 
+func (y *YySpider) SetXlsxName(name string) *YySpider {
+
+	y.xlsxName = strings.TrimRight(name, ".xlsx")
+
+	return y
+
+}
+
+func (y *YySpider) ResultCallback(f func(item map[string]string)) *YySpider {
+
+	y.resultCallback = f
+
+	return y
+}
+
 func (y *YySpider) Start() error {
 
 	res := make(map[string]string)
@@ -163,22 +181,55 @@ func (y *YySpider) Start() error {
 
 	y.dealPage("", 0, res)
 
-	xlsxName := uuid.NewV4().String()
+	if y.resultCallback != nil {
 
-	err := y.excelFile.SaveAs(xlsxName + ".xlsx")
+		xlsxName := y.generateXlsxName()
 
-	if err != nil {
+		dir := filepath.Dir(xlsxName)
 
-		return err
+		os.MkdirAll(dir, 0755)
+
+		err := y.excelFile.SaveAs(xlsxName)
+
+		if err != nil {
+
+			return err
+		}
+
+		log.Println(xlsxName)
+
 	}
-
-	log.Println(xlsxName + ".xlsx")
 
 	return nil
 
 }
 
+func (y *YySpider) generateXlsxName() string {
+
+	xlsxName := y.xlsxName
+
+	if xlsxName == "" {
+
+		xlsxName = uuid.NewV4().String()
+	}
+
+	return xlsxName + ".xlsx"
+
+}
+
 func (y *YySpider) dealRes(res map[string]string) {
+
+	defer func() {
+
+		y.excelIndex++
+	}()
+
+	if y.resultCallback != nil {
+
+		y.resultCallback(res)
+
+		return
+	}
 
 	sheetName := y.excelFile.GetSheetName(y.excelSheetIndex)
 
@@ -213,13 +264,9 @@ func (y *YySpider) dealRes(res map[string]string) {
 
 		y.excelFile.SetCellValue(sheetName, y.getCell(s)+strconv.Itoa(y.excelIndex+1), s2)
 
-		//fmt.Println(s, s2)
-
 	}
 
 	y.debugMsg(res, "", "")
-
-	y.excelIndex++
 
 }
 
@@ -254,16 +301,10 @@ func (y *YySpider) getColumnNameByIndex(index int) string {
 func (y *YySpider) excelInit() {
 
 	f := excelize.NewFile()
-	//defer func() {
-	//	if err := f.Close(); err != nil {
-	//		//fmt.Println(err)
-	//
-	//	}
-	//}()
+
 	// Create a new sheet.
 	index, err := f.NewSheet("Sheet1")
 	if err != nil {
-		//fmt.Println(err)
 
 		y.debugMsg(err.Error(), "", "")
 
@@ -305,8 +346,6 @@ func (y *YySpider) dealPage(link string, currentIndex int, res map[string]string
 
 		if link != "" {
 
-			//fmt.Println(link)
-
 			err := y.getList(link, listPage, res, currentIndex)
 
 			if err != nil {
@@ -334,8 +373,6 @@ func (y *YySpider) dealPage(link string, currentIndex int, res map[string]string
 
 				listLink := y.host + strings.Replace(listPage.channel, "[PAGE]", strconv.Itoa(listPage.pageCurrent), -1)
 
-				//fmt.Println(listLink, listPage.pageCurrent, listPage.pageStart+listPage.pageLength)
-
 				err := y.getList(listLink, listPage, res, currentIndex)
 
 				if err != nil {
@@ -345,8 +382,6 @@ func (y *YySpider) dealPage(link string, currentIndex int, res map[string]string
 					y.debugMsg(err.Error(), listLink, "")
 
 				}
-
-				//return err
 
 			}
 		}
@@ -379,15 +414,14 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 
 	if err != nil {
 
-		//fmt.Println(err.Message)
-
 		return err
 
 	}
 
-	fmt.Println(listUrl)
+	if y.debug {
 
-	//fmt.Println(html)
+		fmt.Println(listUrl)
+	}
 
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
 
@@ -456,8 +490,6 @@ func (y *YySpider) getDetail(detailUrl string, detailPage *DetailPage, res map[s
 	html, err := y.requestHtml(detailUrl)
 
 	if err != nil {
-
-		//fmt.Println(err.Message)
 
 		return err
 
@@ -719,6 +751,10 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 		item := itemT
 
+		resKey := field
+
+		resValue := ""
+
 		switch item.Type {
 
 		//单个文字字段
@@ -735,7 +771,11 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 			v := strings.TrimSpace(selectors.Text())
 
-			res.Store(field, v)
+			//res.Store(field, v)
+
+			resKey = field
+
+			resValue = v
 
 			break
 
@@ -753,7 +793,11 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 				v, _ = doc.Find(item.Selector).Attr(item.AttrKey)
 			}
 
-			res.Store(field, strings.TrimSpace(v))
+			//res.Store(field, strings.TrimSpace(v))
+
+			resKey = field
+
+			resValue = strings.TrimSpace(v)
 
 			break
 
@@ -773,7 +817,11 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 			})
 
-			res.Store(field, tools.Join(",", v))
+			//res.Store(field, tools.Join(",", v))
+
+			resKey = field
+
+			resValue = tools.Join(",", v)
 
 			break
 
@@ -803,7 +851,11 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 			}
 
-			res.Store(field, v)
+			//res.Store(field, v)
+
+			resKey = field
+
+			resValue = v
 
 			break
 
@@ -904,7 +956,11 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 					return true
 				})
 
-				res.Store(field, html_)
+				//res.Store(field, html_)
+
+				resKey = field
+
+				resValue = html_
 
 			}(item, field)
 
@@ -939,7 +995,11 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 					y.debugMsg("下载单个图片失败:"+imgUrl, originUrl, _item.Selector)
 
 				} else {
-					res.Store(field, imgName)
+					//res.Store(field, imgName)
+
+					resKey = field
+
+					resValue = imgName
 				}
 
 			}(item, field)
@@ -968,7 +1028,11 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 			} else {
 
-				res.Store(field, imgName)
+				//res.Store(field, imgName)
+
+				resKey = field
+
+				resValue = imgName
 			}
 
 		//多个图片
@@ -989,8 +1053,6 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 					imgUrl, imgUrlErr := y.getImageLink(selection, _item, originUrl)
 
 					if imgUrlErr != nil {
-
-						//f.s.notice.Error(err.Error()+",源链接："+originUrl, ",选择器：", _item.Selector)
 
 						y.debugMsg(err.Error(), originUrl, _item.Selector)
 
@@ -1035,14 +1097,22 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 				array := tools.Join(",", strArray)
 
-				res.Store(field, array)
+				//res.Store(field, array)
+
+				resKey = field
+
+				resValue = array
 
 			}(item, field)
 
 		//固定数据
 		case Fixed:
 
-			res.Store(field, item.Selector)
+			//res.Store(field, item.Selector)
+
+			resKey = field
+
+			resValue = item.Selector
 
 		//正则
 		case Regular:
@@ -1058,7 +1128,11 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 					index = item.RegularIndex
 				}
 
-				res.Store(field, reg[index])
+				//res.Store(field, reg[index])
+
+				resKey = field
+
+				resValue = reg[index]
 
 			} else {
 
@@ -1071,9 +1145,16 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 		}
 
-	}
+		wait.Wait()
 
-	wait.Wait()
+		if item.ConversionFunc != nil {
+
+			resValue = item.ConversionFunc(resValue)
+		}
+
+		res.Store(resKey, resValue)
+
+	}
 
 	arr := make(map[string]string)
 
@@ -1267,8 +1348,6 @@ func (y *YySpider) downImg(url string, item Field, res *sync.Map) (string, error
 		imgRes, errRes := imgDeal.LoadImage(y.completePath(y.savePath) + y.completePath(y.imageDir) + imgName)
 
 		if errRes != nil {
-
-			//fmt.Println("图片压缩加载错误:" + errRes.Error())
 
 			return "", errors.New("图片压缩加载错误:" + errRes.Error())
 

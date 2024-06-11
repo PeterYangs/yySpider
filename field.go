@@ -10,4 +10,5 @@ type Field struct {
 	ImageDir          string                        //图片子文件夹，支持变量 1.[date:Y-m-d] 2.[random:1-100] 3.[singleField:title]
 	ImagePrefix       func(imageName string) string //图片路径前缀,会添加到图片路径前缀，但不会生成文件夹
 	RegularIndex      int                           //正则匹配中的反向引用的下标，默认是1
+	ConversionFunc    func(item string) string      //转换格式函数,第一个参数是该字段数据
 }
