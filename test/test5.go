@@ -16,7 +16,7 @@ func main() {
 	s.Host("https://www.secretmine.net")
 
 	//打开debug
-	//s.Debug()
+	s.Debug()
 
 	//第一个页面是列表
 	list := s.NewListPage(
@@ -48,11 +48,11 @@ func main() {
 	//设置输出的xlsx文件路径
 	s.SetXlsxName("xlsx/" + uuid.NewV4().String())
 
-	s.ResultCallback(func(item map[string]string) {
-
-		fmt.Println(item)
-
-	})
+	//s.ResultCallback(func(item map[string]string) {
+	//
+	//	fmt.Println(item)
+	//
+	//})
 
 	err := s.Start()
 

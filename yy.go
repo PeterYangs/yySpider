@@ -45,6 +45,7 @@ type YySpider struct {
 	excelFile                  *excelize.File
 	xlsxName                   string                       //自定义xlsx文件名
 	resultCallback             func(item map[string]string) //自定义获取采集结果回调
+	proxyUrl                   string
 }
 
 func NewYySpider(cxt context.Context) *YySpider {
@@ -52,9 +53,12 @@ func NewYySpider(cxt context.Context) *YySpider {
 	//client := resty.New()
 	y := &YySpider{header: make(map[string]string), cxt: cxt, imageDir: "image", lock: sync.Mutex{}}
 
-	y.client = y.httpInit()
+	return y
+}
 
-	y.excelInit()
+func (y *YySpider) SetProxy(proxyUrl string) *YySpider {
+
+	y.proxyUrl = proxyUrl
 
 	return y
 }
@@ -172,6 +176,10 @@ func (y *YySpider) ResultCallback(f func(item map[string]string)) *YySpider {
 
 func (y *YySpider) Start() error {
 
+	y.client = y.httpInit()
+
+	y.excelInit()
+
 	res := make(map[string]string)
 
 	if len(y.pageList) <= 0 {
@@ -181,7 +189,7 @@ func (y *YySpider) Start() error {
 
 	y.dealPage("", 0, res)
 
-	if y.resultCallback != nil {
+	if y.resultCallback == nil {
 
 		xlsxName := y.generateXlsxName()
 
@@ -321,6 +329,12 @@ func (y *YySpider) httpInit() *resty.Client {
 	client := resty.New()
 
 	client.SetTimeout(60 * time.Second)
+
+	if y.proxyUrl != "" {
+
+		client.SetProxy(y.proxyUrl)
+
+	}
 
 	return client
 
