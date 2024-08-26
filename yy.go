@@ -51,7 +51,10 @@ type YySpider struct {
 func NewYySpider(cxt context.Context) *YySpider {
 
 	//client := resty.New()
+
 	y := &YySpider{header: make(map[string]string), cxt: cxt, imageDir: "image", lock: sync.Mutex{}}
+
+	y.client = y.httpInit()
 
 	return y
 }
@@ -175,8 +178,6 @@ func (y *YySpider) ResultCallback(f func(item map[string]string)) *YySpider {
 }
 
 func (y *YySpider) Start() error {
-
-	y.client = y.httpInit()
 
 	y.excelInit()
 
@@ -364,8 +365,6 @@ func (y *YySpider) dealPage(link string, currentIndex int, res map[string]string
 
 			if err != nil {
 
-				//y.Debug()
-
 				y.debugMsg(err.Error(), link, "")
 
 			}
@@ -390,8 +389,6 @@ func (y *YySpider) dealPage(link string, currentIndex int, res map[string]string
 				err := y.getList(listLink, listPage, res, currentIndex)
 
 				if err != nil {
-
-					//y.Debug()
 
 					y.debugMsg(err.Error(), listLink, "")
 
@@ -438,6 +435,13 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 	}
 
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
+
+	listSize := doc.Find(listPage.listSelector).Size()
+
+	if listSize == 0 {
+
+		y.debugMsg("列表选择器未找到", listUrl, listPage.listSelector)
+	}
 
 	doc.Find(listPage.listSelector).EachWithBreak(func(i int, selection *goquery.Selection) bool {
 
@@ -490,6 +494,10 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 			res3 := y.mergeRes(res2, res)
 
 			y.dealPage(href, currentIndex+1, res3)
+
+		} else {
+
+			y.dealPage(href, currentIndex+1, res)
 
 		}
 

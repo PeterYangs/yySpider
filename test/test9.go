@@ -11,7 +11,7 @@ func main() {
 	s := yySpider.NewYySpider(context.Background())
 
 	//设置域名
-	s.Host("https://www.weidown.com")
+	s.Host("http://www.anfensi.com")
 
 	//设置headers
 	s.Headers(map[string]string{
@@ -23,28 +23,44 @@ func main() {
 
 	//第一个页面是小说列表页
 	list := s.NewListPage(
-		"/android/list_[PAGE].html",
-		" div.articleWrapper > ul",
+		"/soft/r_48_[PAGE].html",
+		"#listCont dd p",
 		1,
-		1,
+		50,
 	)
 
 	//设置选择器
 	list.SetFields(map[string]yySpider.Field{
-		"title": {Type: yySpider.Text, Selector: "h2"},
+		//"pp": {Type: yySpider.Text, Selector: "a"},
 	})
 
 	//设置下一页入口
 	list.SetNextPageLinkSelector("a", "href")
 
+	//小说章节列表页面
+	list2 := s.NewListPage(
+		"",
+		".klist",
+		1,
+		1,
+	)
+
+	//设置选择器
+	list2.SetFields(map[string]yySpider.Field{
+		//"zhang_name": {Type: yySpider.Text, Selector: "a"},
+	})
+
+	//设置下一页入口
+	list2.SetNextPageLinkSelector("a", "href")
+
 	//详情页
 	detail := s.NewDetailPage()
 
 	detail.SetFields(map[string]yySpider.Field{
-		"detail_title": {Type: yySpider.Text, Selector: "h1"},
+		"title": {Type: yySpider.Text, Selector: ".topics-top .soft-title"},
+		"image": {Type: yySpider.Attr, Selector: ".topics-top .fl-lf img", AttrKey: "src"},
+		"desc":  {Type: yySpider.Text, Selector: ".soft .introduction"},
 	})
-
-	//s.SetSavePath("collect/anfensi-soft.xlsx")
 
 	s.SetXlsxName("collect/anfensi-soft.xlsx")
 
