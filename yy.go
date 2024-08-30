@@ -491,6 +491,19 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 
 			}
 
+			if listPage.callback != nil {
+
+				isContinue := listPage.callback(res2)
+
+				if !isContinue {
+
+					y.debugMsg("数据过滤", listUrl, listPage.listSelector)
+
+					return true
+				}
+
+			}
+
 			res3 := y.mergeRes(res2, res)
 
 			y.dealPage(href, currentIndex+1, res3)
@@ -517,13 +530,24 @@ func (y *YySpider) getDetail(detailUrl string, detailPage *DetailPage, res map[s
 
 	}
 
-	//doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
-
 	res2, resErr := y.resolveSelector(html, detailPage.fields, detailUrl)
 
 	if resErr != nil {
 
 		return resErr
+	}
+
+	if detailPage.callback != nil {
+
+		isContinue := detailPage.callback(res2)
+
+		if !isContinue {
+
+			y.debugMsg("数据过滤", detailUrl, "")
+
+			return nil
+		}
+
 	}
 
 	res3 := y.mergeRes(res2, res)

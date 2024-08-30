@@ -12,6 +12,7 @@ type ListPage struct {
 	hrefSelectorAttr string
 	fields           map[string]Field //列表页面字段选择器
 	hasNextPage      bool
+	callback         func(item map[string]string) bool
 	y                *YySpider
 }
 
@@ -106,6 +107,26 @@ func (l *ListPage) SetNextPageLinkSelector(hrefSelector string, hrefSelectorAttr
 	l.hrefSelector = hrefSelector
 
 	l.hrefSelectorAttr = hrefSelectorAttr
+
+	return l
+}
+
+func (l *ListPage) Callback(callback func(item map[string]string)) *ListPage {
+
+	l.callback = func(i map[string]string) bool {
+
+		callback(i)
+
+		return true
+
+	}
+
+	return l
+}
+
+func (l *ListPage) CallbackWithBreak(callback func(item map[string]string) bool) *ListPage {
+
+	l.callback = callback
 
 	return l
 }

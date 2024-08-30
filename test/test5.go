@@ -23,7 +23,7 @@ func main() {
 		"/tag/page_[PAGE]/", //列表规则,页码用[PAGE]代替
 		"body > div.main > div.downlist.boxbg.lazy.clearfix > ul > li", //列表选择器
 		1, //起始页码
-		2, //采集长度
+		1, //采集长度
 	)
 
 	//列表采集
@@ -32,6 +32,12 @@ func main() {
 		"size": {Type: yySpider.Text, Selector: " div > i:nth-child(3)", ConversionFunc: func(item string) string {
 			return strings.Replace(item, "大小：", "", -1)
 		}}, //ConversionFunc是转换器，item是采集到的结果，返回你需要的格式
+	}).CallbackWithBreak(func(item map[string]string) bool {
+		//数据过滤
+		if item["title"] != "pvz2杂交版2.3版本" {
+			return true
+		}
+		return false
 	})
 
 	//设置详情页的入口，这里的意思是，列表上的li下的 p > a的a链接是详情页，取href属性
@@ -42,17 +48,17 @@ func main() {
 
 	//跟列表配置一样
 	detail.SetFields(map[string]yySpider.Field{
-		"img": {Type: yySpider.Image, Selector: "body > div.comment_box.clearfix > div.down_infor_top > div > img"},
+		"source": {Type: yySpider.Text, Selector: " #decimal_unm"},
+	}).CallbackWithBreak(func(item map[string]string) bool {
+		//数据过滤
+		if item["source"] != "8.5" {
+			return true
+		}
+		return false
 	})
 
 	//设置输出的xlsx文件路径
 	s.SetXlsxName("xlsx/" + uuid.NewV4().String())
-
-	//s.ResultCallback(func(item map[string]string) {
-	//
-	//	fmt.Println(item)
-	//
-	//})
 
 	err := s.Start()
 
