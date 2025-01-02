@@ -610,11 +610,11 @@ func (y *YySpider) dealCoding(html string, header http.Header) (string, error) {
 
 		case "gbk":
 
-			return string(tools.ConvertToByte(html, "gbk", "utf8")), nil
+			return tools.Convert(html, "gbk", "utf8")
 
 		case "gb2312":
 
-			return string(tools.ConvertToByte(html, "gbk", "utf8")), nil
+			return tools.Convert(html, "gbk", "utf8")
 
 		case "utf-8":
 
@@ -626,14 +626,14 @@ func (y *YySpider) dealCoding(html string, header http.Header) (string, error) {
 
 		case "euc-jp":
 
-			return string(tools.ConvertToByte(html, "euc-jp", "utf8")), nil
+			return tools.Convert(html, "euc-jp", "utf8")
 
 		case "":
 
 			break
 
 		default:
-			return string(tools.ConvertToByte(html, charset, "utf8")), nil
+			return tools.Convert(html, charset, "utf8")
 
 		}
 
@@ -655,11 +655,11 @@ func (y *YySpider) dealCoding(html string, header http.Header) (string, error) {
 
 	case "gbk":
 
-		return string(tools.ConvertToByte(html, "gbk", "utf8")), nil
+		return tools.Convert(html, "gbk", "utf8")
 
 	case "gb2312":
 
-		return string(tools.ConvertToByte(html, "gbk", "utf8")), nil
+		return tools.Convert(html, "gbk", "utf8")
 
 	case "utf-8":
 
@@ -671,13 +671,13 @@ func (y *YySpider) dealCoding(html string, header http.Header) (string, error) {
 
 	case "euc-jp":
 
-		return string(tools.ConvertToByte(html, "euc-jp", "utf8")), nil
+		return tools.Convert(html, "euc-jp", "utf8")
 
 	case "":
 
 		break
 	default:
-		return string(tools.ConvertToByte(html, contentType, "utf8")), nil
+		return tools.Convert(html, contentType, "utf8")
 
 	}
 
@@ -697,22 +697,22 @@ func (y *YySpider) dealCoding(html string, header http.Header) (string, error) {
 
 	case "gbk":
 
-		return string(tools.ConvertToByte(html, "gbk", "utf8")), nil
+		return tools.Convert(html, "gbk", "utf8")
 
 	case "gb2312":
 
-		return string(tools.ConvertToByte(html, "gbk", "utf8")), nil
+		return tools.Convert(html, "gbk", "utf8")
 
 	case "euc-jp":
 
-		return string(tools.ConvertToByte(html, "euc-jp", "utf8")), nil
+		return tools.Convert(html, "euc-jp", "utf8")
 
 	case "":
 
 		break
 
 	default:
-		return string(tools.ConvertToByte(html, charset, "utf8")), nil
+		return tools.Convert(html, charset, "utf8")
 
 	}
 
