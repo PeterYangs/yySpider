@@ -419,7 +419,13 @@ func (y *YySpider) mergeRes(res1 map[string]string, res2 map[string]string) map[
 
 }
 
+// currentIndex是计数器
 func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]string, currentIndex int) error {
+
+	if listPage.requestListPrefixCallback != nil {
+		//执行前置回调
+		listPage.requestListPrefixCallback(listUrl, currentIndex)
+	}
 
 	html, err := y.requestHtml(listUrl)
 

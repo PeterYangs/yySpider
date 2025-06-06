@@ -3,17 +3,18 @@ package yySpider
 import "strings"
 
 type ListPage struct {
-	channel          string
-	listSelector     string
-	hrefSelector     string
-	pageStart        int
-	pageLength       int
-	pageCurrent      int //当前分页
-	hrefSelectorAttr string
-	fields           map[string]Field //列表页面字段选择器
-	hasNextPage      bool
-	callback         func(item map[string]string) bool
-	y                *YySpider
+	channel                   string
+	listSelector              string
+	hrefSelector              string
+	pageStart                 int
+	pageLength                int
+	pageCurrent               int //当前分页
+	hrefSelectorAttr          string
+	fields                    map[string]Field //列表页面字段选择器
+	hasNextPage               bool
+	callback                  func(item map[string]string) bool
+	y                         *YySpider
+	requestListPrefixCallback func(listUrl string, currentIndex int)
 }
 
 func newListPage(y *YySpider, channel string, listSelector string, pageStart int, pageLength int) *ListPage {
@@ -111,6 +112,7 @@ func (l *ListPage) SetNextPageLinkSelector(hrefSelector string, hrefSelectorAttr
 	return l
 }
 
+// Callback 列表上的每个结果的回调
 func (l *ListPage) Callback(callback func(item map[string]string)) *ListPage {
 
 	l.callback = func(i map[string]string) bool {
@@ -120,6 +122,14 @@ func (l *ListPage) Callback(callback func(item map[string]string)) *ListPage {
 		return true
 
 	}
+
+	return l
+}
+
+// RequestListPrefixCallback 请求列表链接前的回调函数，listUrl是列表链接，currentIndex是计数器
+func (l *ListPage) RequestListPrefixCallback(callback func(listUrl string, currentIndex int)) *ListPage {
+
+	l.requestListPrefixCallback = callback
 
 	return l
 }

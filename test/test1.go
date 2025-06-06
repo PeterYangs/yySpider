@@ -21,13 +21,24 @@ func main() {
 
 	list := s.NewListPage(
 		"/gonglue/list_[PAGE].html",
-		"body > div.ny-container.uk-background-default > div.wrap > div > div.commonLeftDiv.uk-float-left > div > div.bdDiv > div > ul > li",
+		"#ctbar-ctbarw > div.uk-background-default > div > div > div > div.commonLeftDiv.uk-float-left > div > div.bdDiv > div > ul > li",
 		1,
-		20,
+		1,
 	)
 
 	list.SetFields(map[string]yySpider.Field{
 		"title": {Type: yySpider.Text, Selector: "a > div > span"},
+	})
+
+	//列表上每个结果回调
+	list.Callback(func(item map[string]string) {
+
+		fmt.Println(item)
+	})
+
+	//列表抓取前回调
+	list.RequestListPrefixCallback(func(listUrl string, currentIndex int) {
+
 	})
 
 	list.SetNextPageLinkSelector("a", "href")
