@@ -11,6 +11,7 @@ func main() {
 
 	s := yySpider.NewYySpider(context.Background())
 
+	//设置代理
 	s.SetProxy("http://127.0.0.1:7897")
 
 	//设置域名
@@ -24,7 +25,7 @@ func main() {
 	//打开debug
 	s.Debug()
 
-	//第一个页面是小说列表页
+	//第一个页面是商品分类列表
 	list := s.NewListPage(
 		"/deal-categories/",
 		".featured-deals > li",
@@ -40,7 +41,7 @@ func main() {
 	////设置下一个page的入口
 	list.SetNextPageLinkSelector("a", "href")
 
-	//小说章节列表页面
+	//商品列表页
 	list2 := s.NewListPage(
 		"",
 		".bp-p-filterGrid_items li.bp-c-card",
@@ -59,7 +60,7 @@ func main() {
 
 	})
 
-	//下一页链接
+	//下一页链接(/category_name/?page=1)
 	list2.SetPreviousLinkCallback(func(listUrl string) string {
 
 		return listUrl + "?page=[PAGE]"
@@ -97,10 +98,6 @@ func main() {
 	s.ResultCallback(func(item map[string]string) {
 
 		fmt.Println(item["store_link"])
-
-		//if  {
-		//
-		//}
 
 	})
 
