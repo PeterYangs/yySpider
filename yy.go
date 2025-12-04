@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/context"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -359,13 +360,51 @@ func (y *YySpider) dealPage(link string, currentIndex int, res map[string]string
 
 		listPage := page.(*ListPage)
 
-		if link != "" {
+		if link != "" && listPage.previousLinkCallback == nil {
 
+			//多重列表
 			err := y.getList(link, listPage, res, currentIndex)
 
 			if err != nil {
 
 				y.debugMsg(err.Error(), link, "")
+
+			}
+
+		} else if link != "" && listPage.previousLinkCallback != nil {
+
+		FOR2:
+
+			for i := listPage.previousStartPage; i < listPage.previousStartPage+listPage.previousMaxPage; i++ {
+
+				select {
+
+				case <-y.cxt.Done():
+
+					break FOR2
+
+				default:
+
+				}
+
+				u, uErr := url.Parse(link)
+
+				if uErr != nil {
+					y.debugMsg(uErr.Error(), link, "")
+					return uErr
+				}
+
+				channelLink := listPage.previousLinkCallback(y.getFullPath(u))
+
+				listLink := y.host + strings.Replace(channelLink, "[PAGE]", strconv.Itoa(i), -1)
+
+				err := y.getList(listLink, listPage, res, currentIndex)
+
+				if err != nil {
+
+					y.debugMsg(err.Error(), listLink, "")
+
+				}
 
 			}
 
@@ -1566,4 +1605,25 @@ func (y *YySpider) If(condition bool, trueVal, falseVal interface{}) interface{}
 		return trueVal
 	}
 	return falseVal
+}
+
+func (y *YySpider) getFullPath(u *url.URL) string {
+	if u.RawQuery == "" {
+		return u.Path
+	}
+	return u.Path + "?" + u.RawQuery
+}
+
+func (y *YySpider) GetRedirectUrl(u string) (string, error) {
+
+	rsp, err := y.client.R().SetDoNotParseResponse(true).Get(u)
+
+	if err != nil {
+
+		return "", err
+	}
+
+	defer rsp.RawResponse.Body.Close()
+
+	return rsp.RawResponse.Request.URL.String(), nil
 }

@@ -15,6 +15,9 @@ type ListPage struct {
 	callback                  func(item map[string]string) bool
 	y                         *YySpider
 	requestListPrefixCallback func(listUrl string, currentIndex int)
+	previousLinkCallback      func(listUrl string) string //下一页链接的回调
+	previousStartPage         int
+	previousMaxPage           int
 }
 
 func newListPage(y *YySpider, channel string, listSelector string, pageStart int, pageLength int) *ListPage {
@@ -101,6 +104,7 @@ func (l *ListPage) GetFields() map[string]Field {
 	return l.fields
 }
 
+// SetNextPageLinkSelector 设置下一个page的入口
 func (l *ListPage) SetNextPageLinkSelector(hrefSelector string, hrefSelectorAttr string) *ListPage {
 
 	l.hasNextPage = true
@@ -139,4 +143,10 @@ func (l *ListPage) CallbackWithBreak(callback func(item map[string]string) bool)
 	l.callback = callback
 
 	return l
+}
+
+func (l *ListPage) SetPreviousLinkCallback(callback func(listUrl string) string, startPage int, maxPage int) {
+	l.previousLinkCallback = callback
+	l.previousMaxPage = maxPage
+	l.previousStartPage = startPage
 }
