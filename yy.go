@@ -26,7 +26,7 @@ type YySpider struct {
 	client                     *resty.Client
 	host                       string
 	header                     map[string]string
-	pageList                   []interface{}
+	pageList                   []Page
 	cxt                        context.Context
 	disableAutoCoding          bool
 	debug                      bool
@@ -479,6 +479,13 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 		fmt.Println(listUrl)
 	}
 
+	if listPage.GetHtmlCallback() != nil {
+
+		callback := listPage.GetHtmlCallback()
+
+		callback(html, 200, listUrl)
+	}
+
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
 
 	listSize := doc.Find(listPage.listSelector).Size()
@@ -573,6 +580,13 @@ func (y *YySpider) getDetail(detailUrl string, detailPage *DetailPage, res map[s
 
 		return err
 
+	}
+
+	if detailPage.GetHtmlCallback() != nil {
+
+		callback := detailPage.GetHtmlCallback()
+
+		callback(html, 200, detailUrl)
 	}
 
 	res2, resErr := y.resolveSelector(html, detailPage.fields, detailUrl)

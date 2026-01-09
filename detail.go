@@ -1,9 +1,10 @@
 package yySpider
 
 type DetailPage struct {
-	fields   map[string]Field //列表页面字段选择器
-	y        *YySpider
-	callback func(item map[string]string) bool
+	fields       map[string]Field //列表页面字段选择器
+	y            *YySpider
+	callback     func(item map[string]string) bool
+	htmlCallback func(htmlStr string, httpCode int, url string)
 }
 
 func newDetailPage(y *YySpider) *DetailPage {
@@ -36,4 +37,15 @@ func (d *DetailPage) CallbackWithBreak(callback func(item map[string]string) boo
 	d.callback = callback
 
 	return d
+}
+
+func (d *DetailPage) GetHtmlCallback() func(htmlStr string, httpCode int, url string) {
+
+	return d.htmlCallback
+}
+
+// SetHtmlCallback 原生html的回调
+func (d *DetailPage) SetHtmlCallback(callback func(htmlStr string, httpCode int, url string)) {
+
+	d.htmlCallback = callback
 }

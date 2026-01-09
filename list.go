@@ -18,6 +18,7 @@ type ListPage struct {
 	previousLinkCallback      func(listUrl string) string //下一页链接的回调
 	previousStartPage         int
 	previousMaxPage           int
+	htmlCallback              func(htmlStr string, httpCode int, url string)
 }
 
 func newListPage(y *YySpider, channel string, listSelector string, pageStart int, pageLength int) *ListPage {
@@ -28,13 +29,9 @@ func newListPage(y *YySpider, channel string, listSelector string, pageStart int
 
 	l.SetListSelector(listSelector)
 
-	//l.SetHrefSelector(hrefSelector)
-
 	l.SetPageStart(pageStart)
 
 	l.SetPageLength(pageLength)
-
-	//l.SetHrefSelectorAttr("")
 
 	l.y = y
 
@@ -56,14 +53,6 @@ func (l *ListPage) SetListSelector(listSelector string) *ListPage {
 	return l
 }
 
-//func (l *ListPage) SetHrefSelector(hrefSelector string) *ListPage {
-//
-//	l.hrefSelector = hrefSelector
-//
-//	return l
-//
-//}
-
 func (l *ListPage) SetPageStart(pageStart int) *ListPage {
 
 	l.pageStart = pageStart
@@ -77,20 +66,6 @@ func (l *ListPage) SetPageLength(pageLength int) *ListPage {
 
 	return l
 }
-
-//func (l *ListPage) SetHrefSelectorAttr(hrefSelector string) *ListPage {
-//
-//	if strings.TrimSpace(hrefSelector) == "" {
-//
-//		l.hrefSelector = "href"
-//
-//		return l
-//	}
-//
-//	l.hrefSelector = hrefSelector
-//
-//	return l
-//}
 
 func (l *ListPage) SetFields(f map[string]Field) *ListPage {
 
@@ -138,6 +113,7 @@ func (l *ListPage) RequestListPrefixCallback(callback func(listUrl string, curre
 	return l
 }
 
+// CallbackWithBreak 带退出的结果回调
 func (l *ListPage) CallbackWithBreak(callback func(item map[string]string) bool) *ListPage {
 
 	l.callback = callback
@@ -145,8 +121,20 @@ func (l *ListPage) CallbackWithBreak(callback func(item map[string]string) bool)
 	return l
 }
 
+// SetPreviousLinkCallback 设置下一页的回调(/category_name/?page=[PAGE])
 func (l *ListPage) SetPreviousLinkCallback(callback func(listUrl string) string, startPage int, maxPage int) {
 	l.previousLinkCallback = callback
 	l.previousMaxPage = maxPage
 	l.previousStartPage = startPage
+}
+
+func (l *ListPage) GetHtmlCallback() func(htmlStr string, httpCode int, url string) {
+
+	return l.htmlCallback
+}
+
+// SetHtmlCallback 原生html的回调
+func (l *ListPage) SetHtmlCallback(callback func(htmlStr string, httpCode int, url string)) {
+
+	l.htmlCallback = callback
 }

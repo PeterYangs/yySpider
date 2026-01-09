@@ -36,6 +36,13 @@ func main() {
 		fmt.Println(item)
 	})
 
+	//list.SetHtmlCallback(func(htmlStr string, httpCode int, url string) {
+	//
+	//	fmt.Println(htmlStr)
+	//
+	//	panic("")
+	//})
+
 	//列表抓取前回调
 	list.RequestListPrefixCallback(func(listUrl string, currentIndex int) {
 
@@ -48,6 +55,12 @@ func main() {
 	detail.SetFields(map[string]yySpider.Field{
 		"title2": {Type: yySpider.Text, Selector: "h1"},
 	})
+
+	//detail.SetHtmlCallback(func(htmlStr string, httpCode int, url string) {
+	//
+	//	fmt.Println(htmlStr)
+	//	panic("")
+	//})
 
 	err := s.Start()
 
