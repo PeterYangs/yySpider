@@ -1,6 +1,10 @@
 package yySpider
 
-import "strings"
+import (
+	"golang.org/x/net/context"
+	"strings"
+	"time"
+)
 
 type ListPage struct {
 	channel                   string
@@ -19,6 +23,9 @@ type ListPage struct {
 	previousStartPage         int
 	previousMaxPage           int
 	htmlCallback              func(htmlStr string, httpCode int, url string)
+	chromedpWaitSelector      string
+	chromedpWaitTimeout       time.Duration
+	chromedpBeforeCallback    func(ctx context.Context, htmlUrl string) error
 }
 
 func newListPage(y *YySpider, channel string, listSelector string, pageStart int, pageLength int) *ListPage {
@@ -137,4 +144,26 @@ func (l *ListPage) GetHtmlCallback() func(htmlStr string, httpCode int, url stri
 func (l *ListPage) SetHtmlCallback(callback func(htmlStr string, httpCode int, url string)) {
 
 	l.htmlCallback = callback
+}
+
+func (l *ListPage) SetWaitElement(selector string, timeout time.Duration) {
+
+	l.chromedpWaitSelector = selector
+	l.chromedpWaitTimeout = timeout
+}
+
+func (l *ListPage) GetWaitElement() (string, time.Duration) {
+
+	return l.chromedpWaitSelector, l.chromedpWaitTimeout
+}
+
+// SetChromedpBeforeCallback Chromedp前置操作（如点击弹窗之类的）
+func (l *ListPage) SetChromedpBeforeCallback(callback func(ctx context.Context, htmlUrl string) error) {
+
+	l.chromedpBeforeCallback = callback
+}
+
+func (l *ListPage) GetChromedpBeforeCallback() func(ctx context.Context, htmlUrl string) error {
+
+	return l.chromedpBeforeCallback
 }

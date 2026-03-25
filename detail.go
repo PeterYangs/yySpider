@@ -1,10 +1,18 @@
 package yySpider
 
+import (
+	"golang.org/x/net/context"
+	"time"
+)
+
 type DetailPage struct {
-	fields       map[string]Field //列表页面字段选择器
-	y            *YySpider
-	callback     func(item map[string]string) bool
-	htmlCallback func(htmlStr string, httpCode int, url string)
+	fields                 map[string]Field //列表页面字段选择器
+	y                      *YySpider
+	callback               func(item map[string]string) bool
+	htmlCallback           func(htmlStr string, httpCode int, url string)
+	chromedpWaitSelector   string
+	chromedpWaitTimeout    time.Duration
+	chromedpBeforeCallback func(ctx context.Context, htmlUrl string) error
 }
 
 func newDetailPage(y *YySpider) *DetailPage {
@@ -48,4 +56,26 @@ func (d *DetailPage) GetHtmlCallback() func(htmlStr string, httpCode int, url st
 func (d *DetailPage) SetHtmlCallback(callback func(htmlStr string, httpCode int, url string)) {
 
 	d.htmlCallback = callback
+}
+
+func (d *DetailPage) SetWaitElement(selector string, timeout time.Duration) {
+
+	d.chromedpWaitSelector = selector
+	d.chromedpWaitTimeout = timeout
+}
+
+func (d *DetailPage) GetWaitElement() (string, time.Duration) {
+
+	return d.chromedpWaitSelector, d.chromedpWaitTimeout
+}
+
+// SetChromedpBeforeCallback Chromedp前置操作（如点击弹窗之类的）
+func (d *DetailPage) SetChromedpBeforeCallback(callback func(ctx context.Context, htmlUrl string) error) {
+
+	d.chromedpBeforeCallback = callback
+}
+
+func (d *DetailPage) GetChromedpBeforeCallback() func(ctx context.Context, htmlUrl string) error {
+
+	return d.chromedpBeforeCallback
 }

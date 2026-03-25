@@ -1,9 +1,12 @@
 package yySpider
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"github.com/PeterYangs/tools"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/chromedp/chromedp"
 	"github.com/go-resty/resty/v2"
 	"github.com/phpisfirstofworld/image"
 	"github.com/pkg/errors"
@@ -47,6 +50,10 @@ type YySpider struct {
 	xlsxName                   string                       //自定义xlsx文件名
 	resultCallback             func(item map[string]string) //自定义获取采集结果回调
 	proxyUrl                   string
+	browserMode                bool
+	chromedpCtx                context.Context
+	chromedpCancel             context.CancelFunc
+	chromedpTimeout            time.Duration
 }
 
 func NewYySpider(cxt context.Context) *YySpider {
@@ -58,6 +65,97 @@ func NewYySpider(cxt context.Context) *YySpider {
 	y.client = y.httpInit()
 
 	return y
+}
+
+func (y *YySpider) UseBrowserMode() *YySpider {
+
+	y.browserMode = true
+
+	return y
+}
+
+func (y *YySpider) initChrome() (context.Context, context.CancelFunc) {
+	var opts []chromedp.ExecAllocatorOption
+
+	// 1. 基础配置：显式禁用导致报错的 Flag，并设置初始化参数
+	opts = append(opts, chromedp.DefaultExecAllocatorOptions[:]...)
+
+	// 2. 核心伪装：针对 Cloudflare 2026 检测逻辑的配置
+	opts = append(opts,
+		// 必须：禁用控制特征，防止 window.navigator.webdriver = true
+		chromedp.Flag("disable-blink-features", "AutomationControlled"),
+
+		// 必须：防止 Chrome 弹出“正受到自动化软件控制”的提示
+		chromedp.Flag("excludeSwitches", "enable-automation"),
+		chromedp.Flag("enable-automation", false),
+
+		// 增强：禁用一些暴露 CDP 特征的选项
+		chromedp.Flag("use-mock-keychain", true),        // 避免尝试访问系统钥匙串
+		chromedp.Flag("no-default-browser-check", true), // 禁用默认浏览器检查
+
+		// 硬件伪装：设置真实的窗口和显卡加速模式
+		chromedp.WindowSize(1920, 1080),
+		chromedp.Flag("disable-gpu", false), // 开启 GPU，让 Canvas 渲染指纹看起来更像真人
+	)
+
+	// 3. 区分 Debug 模式
+	if y.debug {
+		opts = append(opts,
+			chromedp.Flag("headless", false),
+			// 使用一个独立的临时目录，而不是真实用户数据，确保每次运行环境干净
+			//chromedp.Flag("user-data-dir", "/tmp/chromedp_test_profile"),
+		)
+	} else {
+		opts = append(opts,
+			chromedp.Flag("headless", "new"), // 生产环境建议开启
+		)
+	}
+
+	// 4. 动态参数：User-Agent 和 Proxy
+	ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+	opts = append(opts, chromedp.UserAgent(ua))
+
+	if y.proxyUrl != "" {
+		opts = append(opts, chromedp.ProxyServer(y.proxyUrl))
+	}
+
+	// 5. 启动 Allocator
+	timeout := y.chromedpTimeout
+	if timeout == 0 {
+		timeout = 3 * time.Hour
+	}
+	baseCtx, baseCancel := context.WithTimeout(context.Background(), timeout)
+	allocCtx, allocCancel := chromedp.NewExecAllocator(baseCtx, opts...)
+
+	// 6. 创建 Context 并注入 JS (这是最后一道防线)
+	ctx, ctxCancel := chromedp.NewContext(
+		allocCtx,
+		chromedp.WithLogf(func(s string, i ...interface{}) {}),
+	)
+
+	// 关键：在页面加载前强制覆盖指纹
+	y.chromedpCtx = ctx
+	y.chromedpCancel = func() {
+		ctxCancel()
+		allocCancel()
+		baseCancel()
+	}
+
+	return y.chromedpCtx, y.chromedpCancel
+}
+
+func (y *YySpider) chromeProfileDir() string {
+	host := strings.TrimPrefix(strings.TrimPrefix(y.host, "https://"), "http://")
+	host = strings.TrimRight(host, "/")
+
+	key := host + "|" + y.proxyUrl
+	sum := md5.Sum([]byte(key))
+	name := hex.EncodeToString(sum[:8])
+
+	// 放到你项目目录或可写目录下
+	dir := filepath.Join(".", "chrome_profiles", name)
+	_ = os.MkdirAll(dir, 0755)
+	return dir
 }
 
 func (y *YySpider) SetProxy(proxyUrl string) *YySpider {
@@ -187,6 +285,14 @@ func (y *YySpider) Start() error {
 	if len(y.pageList) <= 0 {
 
 		return errors.New("page数量为0")
+	}
+
+	//浏览器模式（浏览器的模式打开浏览器）
+	if y.browserMode {
+
+		y.initChrome()
+
+		defer y.chromedpCancel()
 	}
 
 	y.dealPage("", 0, res)
@@ -466,7 +572,7 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 		listPage.requestListPrefixCallback(listUrl, currentIndex)
 	}
 
-	html, err := y.requestHtml(listUrl)
+	html, err := y.requestHtml(listUrl, listPage)
 
 	if err != nil {
 
@@ -574,7 +680,7 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 
 func (y *YySpider) getDetail(detailUrl string, detailPage *DetailPage, res map[string]string, currentIndex int) error {
 
-	html, err := y.requestHtml(detailUrl)
+	html, err := y.requestHtml(detailUrl, detailPage)
 
 	if err != nil {
 
@@ -617,7 +723,48 @@ func (y *YySpider) getDetail(detailUrl string, detailPage *DetailPage, res map[s
 
 }
 
-func (y *YySpider) requestHtml(htmlUrl string) (string, error) {
+func (y *YySpider) requestHtml(htmlUrl string, page Page) (string, error) {
+
+	if y.browserMode {
+
+		var html string
+
+		err := chromedp.Run(
+			y.chromedpCtx,
+			// 注入底层抹除脚本
+			chromedp.Navigate(htmlUrl),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+
+				selector, timeout := page.GetWaitElement()
+				if selector != "" {
+					newCtx, _ := context.WithTimeout(ctx, timeout)
+					return chromedp.WaitVisible(selector, chromedp.ByQuery).Do(newCtx)
+				} else {
+					chromedp.Sleep(10 * time.Second).Do(ctx)
+				}
+
+				return nil
+			}),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+
+				if page.GetChromedpBeforeCallback() != nil {
+
+					callback := page.GetChromedpBeforeCallback()
+
+					return callback(ctx, htmlUrl)
+				}
+
+				return nil
+			}),
+			chromedp.OuterHTML("html", &html, chromedp.ByQuery),
+		)
+
+		if err != nil {
+			return "", err
+		}
+
+		return html, nil
+	}
 
 	rsp, err := y.client.R().Get(htmlUrl)
 

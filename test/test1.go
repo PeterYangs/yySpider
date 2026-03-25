@@ -15,6 +15,8 @@ func main() {
 	//_ = cancel
 	s := yySpider.NewYySpider(context.Background())
 
+	s.UseBrowserMode()
+
 	s.Host("https://www.925g.com")
 
 	s.Debug()
@@ -61,6 +63,11 @@ func main() {
 	//	fmt.Println(htmlStr)
 	//	panic("")
 	//})
+
+	s.ResultCallback(func(item map[string]string) {
+
+		fmt.Println(item)
+	})
 
 	err := s.Start()
 
