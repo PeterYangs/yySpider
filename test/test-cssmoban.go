@@ -52,6 +52,7 @@ func main() {
 	//等待元素出现（只在无头浏览器模式下生效）
 	detail.SetWaitElement("h1", 10*time.Second)
 
+	//捕获下载链接（结果会出现在结果中）
 	detail.SetDownload("download_url")
 
 	//获取html前操作浏览器（只在无头浏览器模式下生效）
