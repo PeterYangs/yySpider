@@ -745,6 +745,12 @@ func (y *YySpider) ResultCallback(f func(item map[string]string)) *YySpider {
 
 func (y *YySpider) Start() error {
 
+	defer func() {
+
+		close(y.downloadCh)
+
+	}()
+
 	y.excelInit()
 
 	res := make(map[string]string)
