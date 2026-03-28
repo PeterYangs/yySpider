@@ -12,4 +12,6 @@ type Page interface {
 	GetWaitElement() (string, time.Duration)
 	SetChromedpBeforeCallback(callback func(ctx context.Context, htmlUrl string) error)
 	GetChromedpBeforeCallback() func(ctx context.Context, htmlUrl string) error
+	SetDownload(downloadKey string)
+	GetDownloadKey() string
 }

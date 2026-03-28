@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"github.com/PeterYangs/tools"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/chromedp/cdproto/browser"
+	"github.com/chromedp/cdproto/emulation"
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/go-resty/resty/v2"
 	"github.com/phpisfirstofworld/image"
@@ -14,6 +18,7 @@ import (
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/net/context"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -54,15 +59,65 @@ type YySpider struct {
 	chromedpCtx                context.Context
 	chromedpCancel             context.CancelFunc
 	chromedpTimeout            time.Duration
+	Device                     DeviceType
+	downloadCh                 DownloadCh
+}
+
+type DownloadMessage struct {
+	PageId      string
+	DownloadUrl string
+}
+
+type DownloadCh chan DownloadMessage
+
+type DeviceType string
+
+const (
+	DevicePC      DeviceType = "pc"
+	DeviceAndroid DeviceType = "android"
+	DeviceIPhone  DeviceType = "iphone"
+)
+
+type DeviceProfile struct {
+	Type             DeviceType
+	Name             string
+	UA               string
+	Platform         string
+	AcceptLanguage   string
+	Width            int64
+	Height           int64
+	DeviceScaleRatio float64
+	Mobile           bool
+	Touch            bool
+	MaxTouchPoints   int64
+}
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
 }
 
 func NewYySpider(cxt context.Context) *YySpider {
 
 	//client := resty.New()
 
-	y := &YySpider{header: make(map[string]string), cxt: cxt, imageDir: "image", lock: sync.Mutex{}}
+	y := &YySpider{
+		header:     make(map[string]string),
+		cxt:        cxt,
+		imageDir:   "image",
+		lock:       sync.Mutex{},
+		Device:     DevicePC,
+		downloadCh: make(DownloadCh, 20),
+	}
 
 	y.client = y.httpInit()
+
+	return y
+}
+
+// SetDeviceType 设置设备（支持pc、安卓和ios）
+func (y *YySpider) SetDeviceType(d DeviceType) *YySpider {
+
+	y.Device = d
 
 	return y
 }
@@ -74,7 +129,10 @@ func (y *YySpider) UseBrowserMode() *YySpider {
 	return y
 }
 
-func (y *YySpider) initChrome() (context.Context, context.CancelFunc) {
+func (y *YySpider) initChrome(device DeviceType) (context.Context, context.CancelFunc, error) {
+
+	profile := y.getRandomDeviceProfile(device)
+
 	var opts []chromedp.ExecAllocatorOption
 
 	// 1. 基础配置：显式禁用导致报错的 Flag，并设置初始化参数
@@ -94,7 +152,8 @@ func (y *YySpider) initChrome() (context.Context, context.CancelFunc) {
 		chromedp.Flag("no-default-browser-check", true), // 禁用默认浏览器检查
 
 		// 硬件伪装：设置真实的窗口和显卡加速模式
-		chromedp.WindowSize(1920, 1080),
+		chromedp.WindowSize(int(profile.Width), int(profile.Height)),
+		chromedp.UserAgent(profile.UA),
 		chromedp.Flag("disable-gpu", false), // 开启 GPU，让 Canvas 渲染指纹看起来更像真人
 	)
 
@@ -112,8 +171,8 @@ func (y *YySpider) initChrome() (context.Context, context.CancelFunc) {
 	}
 
 	// 4. 动态参数：User-Agent 和 Proxy
-	ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-	opts = append(opts, chromedp.UserAgent(ua))
+	//ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+	//opts = append(opts, chromedp.UserAgent(ua))
 
 	if y.proxyUrl != "" {
 		opts = append(opts, chromedp.ProxyServer(y.proxyUrl))
@@ -133,6 +192,17 @@ func (y *YySpider) initChrome() (context.Context, context.CancelFunc) {
 		chromedp.WithLogf(func(s string, i ...interface{}) {}),
 	)
 
+	// 先执行伪装和下载配置，再打开页面
+	if err := chromedp.Run(ctx, y.buildEmulationActions(profile, "", true)...); err != nil {
+		ctxCancel()
+		allocCancel()
+		baseCancel()
+		return nil, nil, err
+	}
+
+	//监听下载
+	//y.ListenBrowserDownloadURL(ctx)
+
 	// 关键：在页面加载前强制覆盖指纹
 	y.chromedpCtx = ctx
 	y.chromedpCancel = func() {
@@ -141,7 +211,404 @@ func (y *YySpider) initChrome() (context.Context, context.CancelFunc) {
 		baseCancel()
 	}
 
-	return y.chromedpCtx, y.chromedpCancel
+	return y.chromedpCtx, y.chromedpCancel, nil
+}
+
+//// ListenBrowserDownloadURL 下载监听
+//func (y *YySpider) ListenBrowserDownloadURL(ctx context.Context) {
+//	seen := make(map[string]bool)
+//
+//	chromedp.ListenTarget(ctx, func(ev interface{}) {
+//		switch e := ev.(type) {
+//		case *browser.EventDownloadWillBegin:
+//			// 按 guid 去重，避免同一个下载打印两次
+//			if seen[e.GUID] {
+//				return
+//			}
+//			seen[e.GUID] = true
+//
+//			fmt.Println("最终下载地址:", e.URL)
+//			if e.SuggestedFilename != "" {
+//				fmt.Println("建议文件名:", e.SuggestedFilename)
+//			}
+//		}
+//	})
+//}
+
+// ListenBrowserDownloadURL 下载监听（推荐版）
+func (y *YySpider) ListenBrowserDownloadURL(ctx context.Context, pageId string) {
+	seen := make(map[string]time.Time)
+
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		switch e := ev.(type) {
+
+		case *browser.EventDownloadWillBegin:
+			now := time.Now()
+
+			// 清理过期 GUID（防止 map 无限增长）
+			for k, t := range seen {
+				if now.Sub(t) > 5*time.Minute {
+					delete(seen, k)
+				}
+			}
+
+			// 去重
+			if _, ok := seen[e.GUID]; ok {
+				return
+			}
+			seen[e.GUID] = now
+
+			//fmt.Println("最终下载地址:", e.URL, pageId)
+
+			y.downloadCh <- DownloadMessage{PageId: pageId, DownloadUrl: e.URL}
+
+			if e.SuggestedFilename != "" {
+				//fmt.Println("建议文件名:", e.SuggestedFilename)
+			}
+		}
+	})
+}
+
+func (y *YySpider) buildEmulationActions(profile DeviceProfile, downloadDir string, denyDownload bool) []chromedp.Action {
+	var downloadAction chromedp.Action
+
+	if denyDownload {
+		downloadAction = chromedp.ActionFunc(func(ctx context.Context) error {
+			return browser.SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorDeny).
+				WithEventsEnabled(true).
+				Do(ctx)
+		})
+	} else {
+		downloadAction = chromedp.ActionFunc(func(ctx context.Context) error {
+			return browser.SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorAllow).
+				WithDownloadPath(downloadDir).
+				WithEventsEnabled(true).
+				Do(ctx)
+		})
+	}
+
+	return []chromedp.Action{
+		downloadAction,
+		network.Enable(),
+
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			return emulation.SetUserAgentOverride(profile.UA).
+				WithAcceptLanguage(profile.AcceptLanguage).
+				WithPlatform(profile.Platform).
+				Do(ctx)
+		}),
+		y.buildViewportAction(profile),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			return emulation.SetTouchEmulationEnabled(profile.Touch).
+				WithMaxTouchPoints(profile.MaxTouchPoints).
+				Do(ctx)
+		}),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, err := page.AddScriptToEvaluateOnNewDocument(y.buildStealthJS(profile)).Do(ctx)
+			return err
+		}),
+	}
+}
+
+func (y *YySpider) buildStealthJS(profile DeviceProfile) string {
+	orientation := "landscape-primary"
+	if profile.Mobile {
+		orientation = "portrait-primary"
+	}
+
+	mobileJS := "false"
+	if profile.Mobile {
+		mobileJS = "true"
+	}
+
+	touchJS := "false"
+	if profile.Touch {
+		touchJS = "true"
+	}
+
+	return fmt.Sprintf(`
+(() => {
+	const overrideGetter = (obj, prop, value) => {
+		try {
+			Object.defineProperty(obj, prop, {
+				get: () => value,
+				configurable: true
+			});
+		} catch (e) {}
+	};
+
+	const overrideValue = (obj, prop, value) => {
+		try {
+			Object.defineProperty(obj, prop, {
+				value: value,
+				configurable: true,
+				writable: false
+			});
+		} catch (e) {}
+	};
+
+	overrideGetter(Navigator.prototype, 'webdriver', undefined);
+	overrideGetter(Navigator.prototype, 'platform', %q);
+	overrideGetter(Navigator.prototype, 'language', 'zh-CN');
+	overrideGetter(Navigator.prototype, 'languages', ['zh-CN', 'zh', 'en']);
+	overrideGetter(Navigator.prototype, 'maxTouchPoints', %d);
+	overrideGetter(Navigator.prototype, 'hardwareConcurrency', 8);
+	overrideGetter(Navigator.prototype, 'deviceMemory', 8);
+	overrideGetter(Navigator.prototype, 'vendor', 'Google Inc.');
+	overrideGetter(Navigator.prototype, 'doNotTrack', null);
+
+	if (!window.chrome) {
+		overrideValue(window, 'chrome', {});
+	}
+	if (!window.chrome.runtime) {
+		overrideValue(window.chrome, 'runtime', {});
+	}
+
+	if (window.navigator.permissions && window.navigator.permissions.query) {
+		const originalQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+		window.navigator.permissions.query = (parameters) => {
+			if (parameters && parameters.name === 'notifications') {
+				return Promise.resolve({ state: Notification.permission });
+			}
+			return originalQuery(parameters);
+		};
+	}
+
+	const fakePlugins = [
+		{ name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+		{ name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+		{ name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+	];
+	overrideGetter(Navigator.prototype, 'plugins', fakePlugins);
+	overrideGetter(Navigator.prototype, 'mimeTypes', [
+		{ type: 'application/pdf', suffixes: 'pdf', description: '', enabledPlugin: fakePlugins[0] }
+	]);
+
+	if (!navigator.userAgentData) {
+		overrideGetter(Navigator.prototype, 'userAgentData', {
+			mobile: %s,
+			brands: [
+				{ brand: 'Chromium', version: '137' },
+				{ brand: 'Google Chrome', version: '137' },
+				{ brand: 'Not/A)Brand', version: '24' }
+			],
+			getHighEntropyValues: async function() {
+				return {
+					architecture: 'arm',
+					bitness: '64',
+					mobile: %s,
+					model: '',
+					platform: %q,
+					platformVersion: '0.0.0',
+					uaFullVersion: '137.0.0.0'
+				};
+			}
+		});
+	}
+
+	try {
+		if (screen.orientation) {
+			overrideGetter(screen.orientation, 'type', %q);
+			overrideGetter(screen.orientation, 'angle', 0);
+		}
+	} catch (e) {}
+
+	if (%s) {
+		if (!('ontouchstart' in window)) {
+			overrideValue(window, 'ontouchstart', null);
+		}
+	}
+
+	try {
+		overrideGetter(screen, 'availWidth', %d);
+		overrideGetter(screen, 'availHeight', %d);
+		overrideGetter(screen, 'width', %d);
+		overrideGetter(screen, 'height', %d);
+		overrideGetter(screen, 'colorDepth', 24);
+		overrideGetter(screen, 'pixelDepth', 24);
+	} catch (e) {}
+
+	try {
+		overrideGetter(window, 'devicePixelRatio', %f);
+	} catch (e) {}
+})();
+`,
+		profile.Platform,
+		profile.MaxTouchPoints,
+		mobileJS,
+		mobileJS,
+		profile.Platform,
+		orientation,
+		touchJS,
+		profile.Width,
+		profile.Height,
+		profile.Width,
+		profile.Height,
+		profile.DeviceScaleRatio,
+	)
+}
+
+func (y *YySpider) buildViewportAction(profile DeviceProfile) chromedp.Action {
+	opts := []chromedp.EmulateViewportOption{
+		chromedp.EmulateScale(profile.DeviceScaleRatio),
+	}
+
+	if profile.Mobile {
+		opts = append(opts,
+			chromedp.EmulateMobile,
+			chromedp.EmulateTouch,
+			chromedp.EmulatePortrait,
+		)
+	} else {
+		opts = append(opts,
+			chromedp.EmulateLandscape,
+		)
+	}
+
+	return chromedp.EmulateViewport(profile.Width, profile.Height, opts...)
+}
+
+func (y *YySpider) getRandomDeviceProfile(deviceType DeviceType) DeviceProfile {
+	pcProfiles := []DeviceProfile{
+		{
+			Type:             DevicePC,
+			Name:             "Windows Chrome Desktop",
+			UA:               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+			Platform:         "Win32",
+			AcceptLanguage:   "zh-CN,zh;q=0.9,en;q=0.8",
+			Width:            1920,
+			Height:           1080,
+			DeviceScaleRatio: 1,
+			Mobile:           false,
+			Touch:            false,
+			MaxTouchPoints:   0,
+		},
+		{
+			Type:             DevicePC,
+			Name:             "Mac Chrome Desktop",
+			UA:               "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+			Platform:         "MacIntel",
+			AcceptLanguage:   "zh-CN,zh;q=0.9,en;q=0.8",
+			Width:            1440,
+			Height:           900,
+			DeviceScaleRatio: 2,
+			Mobile:           false,
+			Touch:            false,
+			MaxTouchPoints:   0,
+		},
+		{
+			Type:             DevicePC,
+			Name:             "Windows Chrome Desktop Small",
+			UA:               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+			Platform:         "Win32",
+			AcceptLanguage:   "zh-CN,zh;q=0.9,en;q=0.8",
+			Width:            1536,
+			Height:           864,
+			DeviceScaleRatio: 1,
+			Mobile:           false,
+			Touch:            false,
+			MaxTouchPoints:   0,
+		},
+	}
+
+	androidProfiles := []DeviceProfile{
+		{
+			Type:             DeviceAndroid,
+			Name:             "Android Pixel 7",
+			UA:               "Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A.230805.001) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+			Platform:         "Linux armv8l",
+			AcceptLanguage:   "zh-CN,zh;q=0.9,en;q=0.8",
+			Width:            412,
+			Height:           915,
+			DeviceScaleRatio: 2.625,
+			Mobile:           true,
+			Touch:            true,
+			MaxTouchPoints:   5,
+		},
+		{
+			Type:             DeviceAndroid,
+			Name:             "Android Xiaomi",
+			UA:               "Mozilla/5.0 (Linux; Android 12; M2012K11AC Build/SKQ1.211006.001) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+			Platform:         "Linux armv8l",
+			AcceptLanguage:   "zh-CN,zh;q=0.9,en;q=0.8",
+			Width:            393,
+			Height:           873,
+			DeviceScaleRatio: 2.75,
+			Mobile:           true,
+			Touch:            true,
+			MaxTouchPoints:   5,
+		},
+		{
+			Type:             DeviceAndroid,
+			Name:             "Android Samsung",
+			UA:               "Mozilla/5.0 (Linux; Android 14; SM-S9280 Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+			Platform:         "Linux armv8l",
+			AcceptLanguage:   "zh-CN,zh;q=0.9,en;q=0.8",
+			Width:            360,
+			Height:           800,
+			DeviceScaleRatio: 3,
+			Mobile:           true,
+			Touch:            true,
+			MaxTouchPoints:   5,
+		},
+	}
+
+	iphoneProfiles := []DeviceProfile{
+		{
+			Type:             DeviceIPhone,
+			Name:             "iPhone Safari iOS 17",
+			UA:               "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1",
+			Platform:         "iPhone",
+			AcceptLanguage:   "zh-CN,zh;q=0.9,en;q=0.8",
+			Width:            393,
+			Height:           852,
+			DeviceScaleRatio: 3,
+			Mobile:           true,
+			Touch:            true,
+			MaxTouchPoints:   5,
+		},
+		{
+			Type:             DeviceIPhone,
+			Name:             "iPhone Chrome iOS 17",
+			UA:               "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/137.0.0.0 Mobile/15E148 Safari/604.1",
+			Platform:         "iPhone",
+			AcceptLanguage:   "zh-CN,zh;q=0.9,en;q=0.8",
+			Width:            430,
+			Height:           932,
+			DeviceScaleRatio: 3,
+			Mobile:           true,
+			Touch:            true,
+			MaxTouchPoints:   5,
+		},
+		{
+			Type:             DeviceIPhone,
+			Name:             "iPhone Safari iOS 16",
+			UA:               "Mozilla/5.0 (iPhone; CPU iPhone OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+			Platform:         "iPhone",
+			AcceptLanguage:   "zh-CN,zh;q=0.9,en;q=0.8",
+			Width:            390,
+			Height:           844,
+			DeviceScaleRatio: 3,
+			Mobile:           true,
+			Touch:            true,
+			MaxTouchPoints:   5,
+		},
+	}
+
+	switch deviceType {
+	case DevicePC:
+		return y.randomFrom(pcProfiles)
+	case DeviceAndroid:
+		return y.randomFrom(androidProfiles)
+	case DeviceIPhone:
+		return y.randomFrom(iphoneProfiles)
+	default:
+		return y.randomFrom(pcProfiles)
+	}
+}
+
+func (y *YySpider) randomFrom(list []DeviceProfile) DeviceProfile {
+	return list[rand.Intn(len(list))]
 }
 
 func (y *YySpider) chromeProfileDir() string {
@@ -290,7 +757,7 @@ func (y *YySpider) Start() error {
 	//浏览器模式（浏览器的模式打开浏览器）
 	if y.browserMode {
 
-		y.initChrome()
+		y.initChrome(y.Device)
 
 		defer y.chromedpCancel()
 	}
@@ -460,6 +927,11 @@ func (y *YySpider) dealPage(link string, currentIndex int, res map[string]string
 
 	page := y.pageList[currentIndex]
 
+	////获取下载地址
+	//if page.GetDownloadKey() != "" && y.browserMode == true {
+	//
+	//}
+
 	switch page.(type) {
 
 	case *ListPage:
@@ -572,7 +1044,9 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 		listPage.requestListPrefixCallback(listUrl, currentIndex)
 	}
 
-	html, err := y.requestHtml(listUrl, listPage)
+	pageId := uuid.NewV4().String()
+
+	html, err := y.requestHtml(listUrl, listPage, pageId)
 
 	if err != nil {
 
@@ -590,6 +1064,23 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 		callback := listPage.GetHtmlCallback()
 
 		callback(html, 200, listUrl)
+	}
+
+	//获取下载地址
+	if listPage.GetDownloadKey() != "" && y.browserMode == true {
+
+		select {
+		case v := <-y.downloadCh:
+
+			if v.PageId == pageId {
+
+				res[listPage.GetDownloadKey()] = v.DownloadUrl
+			}
+
+		case <-time.After(15 * time.Second):
+
+		}
+
 	}
 
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
@@ -680,7 +1171,9 @@ func (y *YySpider) getList(listUrl string, listPage *ListPage, res map[string]st
 
 func (y *YySpider) getDetail(detailUrl string, detailPage *DetailPage, res map[string]string, currentIndex int) error {
 
-	html, err := y.requestHtml(detailUrl, detailPage)
+	pageId := uuid.NewV4().String()
+
+	html, err := y.requestHtml(detailUrl, detailPage, pageId)
 
 	if err != nil {
 
@@ -693,6 +1186,23 @@ func (y *YySpider) getDetail(detailUrl string, detailPage *DetailPage, res map[s
 		callback := detailPage.GetHtmlCallback()
 
 		callback(html, 200, detailUrl)
+	}
+
+	//获取下载地址
+	if detailPage.GetDownloadKey() != "" && y.browserMode == true {
+
+		select {
+		case v := <-y.downloadCh:
+
+			if v.PageId == pageId {
+
+				res[detailPage.GetDownloadKey()] = v.DownloadUrl
+			}
+
+		case <-time.After(15 * time.Second):
+
+		}
+
 	}
 
 	res2, resErr := y.resolveSelector(html, detailPage.fields, detailUrl)
@@ -723,11 +1233,22 @@ func (y *YySpider) getDetail(detailUrl string, detailPage *DetailPage, res map[s
 
 }
 
-func (y *YySpider) requestHtml(htmlUrl string, page Page) (string, error) {
+func (y *YySpider) requestHtml(htmlUrl string, page Page, pageId string) (string, error) {
 
 	if y.browserMode {
 
 		var html string
+
+		if page.GetDownloadKey() != "" {
+
+			listenCtx, listenCancel := context.WithCancel(y.chromedpCtx)
+
+			defer listenCancel()
+
+			//监听下载
+			y.ListenBrowserDownloadURL(listenCtx, pageId)
+
+		}
 
 		err := chromedp.Run(
 			y.chromedpCtx,

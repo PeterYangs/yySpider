@@ -26,6 +26,7 @@ type ListPage struct {
 	chromedpWaitSelector      string
 	chromedpWaitTimeout       time.Duration
 	chromedpBeforeCallback    func(ctx context.Context, htmlUrl string) error
+	downloadKey               string
 }
 
 func newListPage(y *YySpider, channel string, listSelector string, pageStart int, pageLength int) *ListPage {
@@ -166,4 +167,14 @@ func (l *ListPage) SetChromedpBeforeCallback(callback func(ctx context.Context, 
 func (l *ListPage) GetChromedpBeforeCallback() func(ctx context.Context, htmlUrl string) error {
 
 	return l.chromedpBeforeCallback
+}
+
+func (l *ListPage) SetDownload(downloadKey string) {
+
+	l.downloadKey = downloadKey
+}
+
+func (l *ListPage) GetDownloadKey() string {
+
+	return l.downloadKey
 }

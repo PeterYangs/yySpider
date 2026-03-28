@@ -13,6 +13,7 @@ type DetailPage struct {
 	chromedpWaitSelector   string
 	chromedpWaitTimeout    time.Duration
 	chromedpBeforeCallback func(ctx context.Context, htmlUrl string) error
+	downloadKey            string
 }
 
 func newDetailPage(y *YySpider) *DetailPage {
@@ -78,4 +79,14 @@ func (d *DetailPage) SetChromedpBeforeCallback(callback func(ctx context.Context
 func (d *DetailPage) GetChromedpBeforeCallback() func(ctx context.Context, htmlUrl string) error {
 
 	return d.chromedpBeforeCallback
+}
+
+func (d *DetailPage) SetDownload(downloadKey string) {
+
+	d.downloadKey = downloadKey
+}
+
+func (d *DetailPage) GetDownloadKey() string {
+
+	return d.downloadKey
 }
