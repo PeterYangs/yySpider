@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/PeterYangs/yySpider"
-	"golang.org/x/net/context"
 	"strings"
 )
 

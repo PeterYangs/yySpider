@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/PeterYangs/yySpider"
 	uuid "github.com/satori/go.uuid"
-	"golang.org/x/net/context"
 	"strings"
 )
 

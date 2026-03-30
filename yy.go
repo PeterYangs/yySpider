@@ -1,6 +1,7 @@
 package yySpider
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -16,7 +17,6 @@ import (
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/xuri/excelize/v2"
-	"golang.org/x/net/context"
 	"log"
 	"math/rand"
 	"net/http"
@@ -77,6 +77,8 @@ const (
 	DeviceAndroid DeviceType = "android"
 	DeviceIPhone  DeviceType = "iphone"
 )
+
+const defaultBrowserWaitTimeout = 15 * time.Second
 
 type DeviceProfile struct {
 	Type             DeviceType
@@ -183,7 +185,11 @@ func (y *YySpider) initChrome(device DeviceType) (context.Context, context.Cance
 	if timeout == 0 {
 		timeout = 3 * time.Hour
 	}
-	baseCtx, baseCancel := context.WithTimeout(context.Background(), timeout)
+	parentCtx := y.cxt
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	baseCtx, baseCancel := context.WithTimeout(parentCtx, timeout)
 	allocCtx, allocCancel := chromedp.NewExecAllocator(baseCtx, opts...)
 
 	// 6. 创建 Context 并注入 JS (这是最后一道防线)
@@ -763,9 +769,13 @@ func (y *YySpider) Start() error {
 	//浏览器模式（浏览器的模式打开浏览器）
 	if y.browserMode {
 
-		y.initChrome(y.Device)
-
-		defer y.chromedpCancel()
+		_, chromeCancel, err := y.initChrome(y.Device)
+		if err != nil {
+			return err
+		}
+		if chromeCancel != nil {
+			defer chromeCancel()
+		}
 	}
 
 	y.dealPage("", 0, res)
@@ -1261,16 +1271,7 @@ func (y *YySpider) requestHtml(htmlUrl string, page Page, pageId string) (string
 			// 注入底层抹除脚本
 			chromedp.Navigate(htmlUrl),
 			chromedp.ActionFunc(func(ctx context.Context) error {
-
-				selector, timeout := page.GetWaitElement()
-				if selector != "" {
-					newCtx, _ := context.WithTimeout(ctx, timeout)
-					return chromedp.WaitVisible(selector, chromedp.ByQuery).Do(newCtx)
-				} else {
-					chromedp.Sleep(10 * time.Second).Do(ctx)
-				}
-
-				return nil
+				return y.waitForBrowserPage(ctx, page, htmlUrl)
 			}),
 			chromedp.ActionFunc(func(ctx context.Context) error {
 
@@ -1324,6 +1325,25 @@ func (y *YySpider) requestHtml(htmlUrl string, page Page, pageId string) (string
 
 	return h, nil
 
+}
+
+func (y *YySpider) waitForBrowserPage(ctx context.Context, page Page, htmlUrl string) error {
+
+	selector, timeout := page.GetWaitElement()
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		selector = "body"
+	}
+	if timeout <= 0 {
+		timeout = defaultBrowserWaitTimeout
+	}
+
+	y.debugMsg(fmt.Sprintf("等待页面元素就绪，超时：%s", timeout), htmlUrl, selector)
+
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	return chromedp.WaitVisible(selector, chromedp.ByQuery).Do(waitCtx)
 }
 
 // dealCoding 解决编码问题
@@ -1504,7 +1524,19 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 	var wait = &sync.WaitGroup{}
 
-	var globalErr error = nil
+	var globalErr error
+	var globalErrLock sync.Mutex
+
+	setGlobalErr := func(err error) {
+		if err == nil {
+			return
+		}
+		globalErrLock.Lock()
+		if globalErr == nil {
+			globalErr = err
+		}
+		globalErrLock.Unlock()
+	}
 
 	//goquery加载html
 	htmlDoc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
@@ -1622,9 +1654,9 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 				res.Store(field, "")
 
-				y.debugMsg("获取onlyHtml失败："+err.Error(), originUrl, item.Selector)
+				y.debugMsg("获取onlyHtml失败："+sErr.Error(), originUrl, item.Selector)
 
-				globalErr = err
+				setGlobalErr(sErr)
 
 				break
 
@@ -1662,7 +1694,7 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 					y.debugMsg(sErr.Error(), originUrl, _item.Selector)
 
-					globalErr = sErr
+					setGlobalErr(sErr)
 
 					return
 				}
@@ -1673,7 +1705,7 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 					//f.s.notice.Error(err.Error() + ",源链接：" + originUrl)
 
-					globalErr = err
+					setGlobalErr(htmlImgErr)
 
 					y.debugMsg("获取HtmlWithImage失败:"+htmlImgErr.Error(), originUrl, _item.Selector)
 
@@ -1693,7 +1725,7 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 						//f.s.notice.Error(err.Error()+",源链接："+originUrl, ",富文本内容")
 
-						globalErr = imgErr
+						setGlobalErr(imgErr)
 
 						y.debugMsg(imgErr.Error(), originUrl, _item.Selector+" img")
 
@@ -1716,7 +1748,7 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 						}
 
-						globalErr = e
+						setGlobalErr(e)
 
 						imgList.Store(imgName, img)
 
@@ -1760,14 +1792,14 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 					y.debugMsg("获取单个图片选择器失败", originUrl, _item.Selector)
 
-					globalErr = err
+					setGlobalErr(imgUrlErr)
 
 					return
 				}
 
 				imgName, e := y.downImg(imgUrl, _item, res)
 
-				globalErr = e
+				setGlobalErr(e)
 
 				if e != nil {
 
@@ -1799,7 +1831,7 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 			imgName, e := y.downImg(v, item, res)
 
-			globalErr = e
+			setGlobalErr(e)
 
 			if e != nil {
 
@@ -1833,9 +1865,9 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 					if imgUrlErr != nil {
 
-						y.debugMsg(err.Error(), originUrl, _item.Selector)
+						y.debugMsg(imgUrlErr.Error(), originUrl, _item.Selector)
 
-						globalErr = err
+						setGlobalErr(imgUrlErr)
 
 						return
 					}
@@ -1855,7 +1887,7 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 							y.debugMsg("图片下载失败:"+imgUrl, originUrl, _item.Selector)
 						}
 
-						globalErr = e
+						setGlobalErr(e)
 
 						imgList.Store(imgName, "")
 
@@ -1915,7 +1947,7 @@ func (y *YySpider) resolveSelector(html string, selector map[string]Field, origi
 
 			} else {
 
-				globalErr = errors.New("正则匹配未找到")
+				setGlobalErr(errors.New("正则匹配未找到"))
 
 				//f.s.notice.Error("正则匹配未找到")
 

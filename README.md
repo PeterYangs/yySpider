@@ -9,6 +9,12 @@
 go get github.com/PeterYangs/yySpider
 ```
 
+
+**文档**
+
+[中文文档](https://github.com/PeterYangs/yySpider/blob/master/QuickStart.md)
+[English](https://github.com/PeterYangs/yySpider/blob/master/QuickStart.md)
+
 **快速开始**
 ```go
 package main
@@ -17,7 +23,7 @@ import (
 	"fmt"
 	"github.com/PeterYangs/yySpider"
 	uuid "github.com/satori/go.uuid"
-	"golang.org/x/net/context"
+	"context"
 	"strings"
 )
 
@@ -81,7 +87,7 @@ package main
 import (
 	"fmt"
 	"github.com/PeterYangs/yySpider"
-	"golang.org/x/net/context"
+	"context"
 )
 
 func main() {
@@ -158,7 +164,7 @@ package main
 import (
 	"fmt"
 	"github.com/PeterYangs/yySpider"
-	"golang.org/x/net/context"
+	"context"
 	"strings"
 )
 
@@ -226,7 +232,7 @@ import (
 	"fmt"
 	"github.com/PeterYangs/yySpider"
 	uuid "github.com/satori/go.uuid"
-	"golang.org/x/net/context"
+	"context"
 	"strings"
 )
 
@@ -300,7 +306,7 @@ package main
 import (
 	"fmt"
 	"github.com/PeterYangs/yySpider"
-	"golang.org/x/net/context"
+	"context"
 )
 
 func main() {
@@ -364,7 +370,7 @@ package main
 import (
 	"fmt"
 	"github.com/PeterYangs/yySpider"
-	"golang.org/x/net/context"
+	"context"
 	"time"
 )
 
@@ -482,7 +488,7 @@ import (
 	"fmt"
 	"github.com/PeterYangs/yySpider"
 	"github.com/chromedp/chromedp"
-	"golang.org/x/net/context"
+	"context"
 	"time"
 )
 
@@ -573,7 +579,7 @@ import (
 	"fmt"
 	"github.com/PeterYangs/yySpider"
 	"github.com/chromedp/chromedp"
-	"golang.org/x/net/context"
+	"context"
 	"time"
 )
 

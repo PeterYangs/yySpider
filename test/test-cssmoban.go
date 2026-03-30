@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/PeterYangs/yySpider"
 	"github.com/chromedp/chromedp"
-	"golang.org/x/net/context"
 	"time"
 )
 
