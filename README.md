@@ -13,7 +13,7 @@ go get github.com/PeterYangs/yySpider
 **文档**
 
 [中文文档](https://github.com/PeterYangs/yySpider/blob/master/QuickStart.md)
-[English](https://github.com/PeterYangs/yySpider/blob/master/QuickStart.md)
+[English](https://github.com/PeterYangs/yySpider/blob/master/QuickStart_en.md)
 
 **快速开始**
 ```go
